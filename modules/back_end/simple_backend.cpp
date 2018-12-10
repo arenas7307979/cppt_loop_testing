@@ -8,7 +8,8 @@
 SimpleBackEnd::SimpleBackEnd(const SimpleStereoCamPtr& camera,
                              const SlidingWindowPtr& sliding_window)
     : mState(INIT), mpCamera(camera), mpSlidingWindow(sliding_window)
-{}
+{
+}
 
 SimpleBackEnd::~SimpleBackEnd() {}
 
@@ -17,9 +18,9 @@ void SimpleBackEnd::Process() {
         std::vector<FramePtr> v_keyframe;
         std::unique_lock<std::mutex> lock(mKFBufferMutex);
         mKFBufferCV.wait(lock, [&]{
-           v_keyframe = mKFBuffer;
-           mKFBuffer.clear();
-           return !v_keyframe.empty();
+            v_keyframe = mKFBuffer;
+            mKFBuffer.clear();
+            return !v_keyframe.empty();
         });
         lock.unlock();
 
@@ -36,7 +37,7 @@ void SimpleBackEnd::Process() {
 
                 // solve the sliding window BA
                 SlidingWindowBA(keyframe);
-
+                PubFrameToPoseGraph(keyframe);
                 // add to sliding window
                 mpSlidingWindow->push_kf(keyframe);
             }
@@ -45,7 +46,6 @@ void SimpleBackEnd::Process() {
                 exit(-1);
             }
         }
-
         ShowResultGUI();
     }
 }
@@ -60,7 +60,7 @@ void SimpleBackEnd::AddKeyFrame(const FramePtr& keyframe) {
 
 void SimpleBackEnd::SetDebugCallback(
         const std::function<void(const std::vector<Sophus::SE3d>&,
-                            const VecVector3d&)>& callback)
+                                 const VecVector3d&)>& callback)
 {
     mDebugCallback = callback;
 }
@@ -82,8 +82,19 @@ void SimpleBackEnd::ShowResultGUI() const {
             mp->mTraversalId = MapPoint::gTraversalId;
         }
     }
-
     mDebugCallback(v_Twc, v_x3Dw);
+}
+
+
+void SimpleBackEnd::PubFrameToPoseGraph(const FramePtr& keyframe) {
+    //TODO::need lock?
+    if(!mPoseGraphCallback)
+        return;
+    mPoseGraphCallback(keyframe);
+}
+
+void SimpleBackEnd::SetPoseGraphCallback(const std::function<void(const FramePtr keyframe)>& PG_callback){
+    mPoseGraphCallback = PG_callback;
 }
 
 bool SimpleBackEnd::InitSystem(const FramePtr& keyframe) {
@@ -148,8 +159,7 @@ void SimpleBackEnd::CreateMapPointFromMotionTracking(const FramePtr& keyframe) {
 
         // solve AX = 0
         Eigen::Vector4d X = Eigen::JacobiSVD<Eigen::MatrixXd>(A,
-                            Eigen::ComputeThinV).matrixV().rightCols<1>();
-
+                                                              Eigen::ComputeThinV).matrixV().rightCols<1>();
         X /= X(3);
 
         if(X(2) < 0.3) // smaller than 30 cm
@@ -175,7 +185,6 @@ void SimpleBackEnd::SlidingWindowBA(const FramePtr& new_keyframe) {
     for(auto& kf : sliding_window) {
         std::memcpy(kf->vertex_data, kf->mTwc.data(), sizeof(double) * 7);
         problem.AddParameterBlock(kf->vertex_data, 7, pose_vertex);
-
         if(kf == sliding_window[0]) // TODO will remove???
             problem.SetParameterBlockConstant(kf->vertex_data);
     }
@@ -214,11 +223,11 @@ void SimpleBackEnd::SlidingWindowBA(const FramePtr& new_keyframe) {
     options.linear_solver_type = ceres::DENSE_SCHUR;
     options.trust_region_strategy_type = ceres::DOGLEG;
     options.max_num_iterations = 10;
-    options.num_threads = 4;
+    options.num_threads = 1;
     ceres::Solver::Summary summary;
 
     ceres::Solve(options, &problem, &summary);
-//    std::cout << summary.FullReport() << std::endl;
+    //    std::cout << summary.FullReport() << std::endl;
 
     for(int i = 0, n = sliding_window.size(); i < n; ++i) {
         Eigen::Map<Sophus::SE3d> Twc(sliding_window[i]->vertex_data);

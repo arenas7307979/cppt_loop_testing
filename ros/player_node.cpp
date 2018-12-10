@@ -51,6 +51,7 @@ public:
         mpSystem->mDebugCallback = std::bind(&Node::PubCurPose, this,
                                              std::placeholders::_1,
                                              std::placeholders::_2);
+
         fs.release();
     }
 
@@ -122,9 +123,7 @@ public:
                 cv::Mat img_left, img_right;
                 img_left = cv_bridge::toCvCopy(img_msg, "mono8")->image;
                 img_right = cv_bridge::toCvCopy(img_msg_right, "mono8")->image;
-
                 mpSystem->Process(img_left, img_right, timestamp);
-
                 auto& frame = mpSystem->mpLastFrame;
                 PubFeatureImg(frame);
             }

@@ -91,14 +91,15 @@ VOSystem::VOSystem(const std::string& config_file) {
     mpFrontEnd = std::make_shared<SimpleFrontEnd>(mpStereoCam, mpSlidingWindow);
     mpBackEnd  = std::make_shared<SimpleBackEnd>(mpStereoCam, mpSlidingWindow);
     mpImgAlign = std::make_shared<SparseImgAlign>(mpStereoCam);
-
+    poseGraph = std::make_shared<SimplePoseGraph>(mpStereoCam);
     fs.release();
 
     // set opencv thread
     cv::setNumThreads(4);
-
     // create backend thread
     mtBackEnd = std::thread(&SimpleBackEnd::Process, mpBackEnd);
+    mtPoseGraph = std::thread(&SimplePoseGraph::Process, poseGraph);
+    mpBackEnd->SetPoseGraphCallback(poseGraph->mPoseGraphCallback);
 }
 
 VOSystem::~VOSystem() {

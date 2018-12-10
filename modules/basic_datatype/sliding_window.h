@@ -4,7 +4,7 @@
 #include "frame.h"
 #include "mappoint.h"
 #include "util_datatype.h"
-
+#include "../ceres/marginalization_factor.h"
 class SlidingWindow {
 public:
     SlidingWindow(int max_len_ = 10);

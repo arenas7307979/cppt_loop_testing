@@ -8,7 +8,7 @@
 #include "front_end/sparse_img_align.h"
 #include "back_end/simple_backend.h"
 #include "basic_datatype/sliding_window.h"
-
+#include "pose_graph/simple_pose_graph.h"
 class VOSystem {
 public:
     VOSystem(const std::string& config_file);
@@ -25,8 +25,12 @@ public:
     FramePtr mpLastFrame;
 
     std::thread mtBackEnd;
-
     std::function<void(const Sophus::SE3d, double timestamp)> mDebugCallback;
+
+    //for pose graph
+    std::thread mtPoseGraph;
+    SimplePoseGraphPtr poseGraph;
+    std::function<void(const FramePtr keyframe)> mPoseGraphCallback;
 };
 
 SMART_PTR(VOSystem)

@@ -126,6 +126,7 @@ basic_datatype/frame.cpp
 basic_datatype/sliding_window.cpp
 basic_datatype/mappoint.cpp
 basic_datatype/util_datatype.cpp
+basic_datatype/keyframe.cpp
 camera_model/camera.cpp
 camera_model/pinhole_camera.cpp
 camera_model/stereo_camera.cpp
@@ -140,6 +141,7 @@ back_end/imu_state.cpp
 back_end/imu_preintegration.cpp
 # back_end/isam2_backend.cpp
 back_end/simple_backend.cpp
+pose_graph/simple_pose_graph.cpp
 ceres/projection_factor.cpp
 ceres/marginalization_factor.cpp
 system/vo_system.cpp
@@ -152,7 +154,7 @@ ${DBOW2_INCLUDE_DIRS}/DBoW2/ScoringObject.cpp
 ${DBOW2_INCLUDE_DIRS}/DUtils/Random.cpp
 ${DBOW2_INCLUDE_DIRS}/DUtils/Timestamp.cpp
 ${DBOW2_INCLUDE_DIRS}/DVision/BRIEF.cpp
-${DBOW2_INCLUDE_DIRS}/VocabularyBinary.cpp
+#${DBOW2_INCLUDE_DIRS}/VocabularyBinary.cpp
 )
 target_link_libraries(cppt_modules ${THRID_PARTY_LIBS})
 
