@@ -29,6 +29,7 @@ public:
 
     //for pose graph
     std::thread mtPoseGraph;
+    std::thread mtPoseGraph6Opt;
     SimplePoseGraphPtr poseGraph;
     std::function<void(const FramePtr keyframe)> mPoseGraphCallback;
 };

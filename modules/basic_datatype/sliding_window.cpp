@@ -16,7 +16,6 @@ void SlidingWindow::push_kf(FramePtr keyframe) {
     }
     kfs_buffer.push_back(keyframe);
 }
-
 void SlidingWindow::push_mp(MapPointPtr mappoint) {
     std::unique_lock<std::mutex> lock(mps_mutex);
     mps_buffer.push_back(mappoint);

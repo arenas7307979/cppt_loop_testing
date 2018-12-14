@@ -95,10 +95,11 @@ VOSystem::VOSystem(const std::string& config_file) {
     fs.release();
 
     // set opencv thread
-    cv::setNumThreads(4);
+    cv::setNumThreads(5);
     // create backend thread
     mtBackEnd = std::thread(&SimpleBackEnd::Process, mpBackEnd);
     mtPoseGraph = std::thread(&SimplePoseGraph::Process, poseGraph);
+    mtPoseGraph6Opt = std::thread(&SimplePoseGraph::optimize6DoF, poseGraph);
     mpBackEnd->SetPoseGraphCallback(poseGraph->mPoseGraphCallback);
 }
 

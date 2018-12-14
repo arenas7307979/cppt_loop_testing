@@ -37,6 +37,7 @@ void Frame::SetToKeyFrame() {
 
 bool Frame::CheckKeyFrame() {
     int num_features = mv_uv.size();
+
     if(num_features < 150) {
         return true;
     }
@@ -50,6 +51,7 @@ bool Frame::CheckKeyFrame() {
     float parallax_ave = parallax_sum / num_features;
 
     if(parallax_ave > 10) {
+        isFastMotion = 0;
         return true;
     }
     return  false;

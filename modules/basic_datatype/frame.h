@@ -25,9 +25,11 @@ public:
     uint64_t mFrameID;
     bool mIsKeyFrame;
     uint64_t mKeyFrameID;
-
     Sophus::SE3d mTwc;
 
+    //judage is fastMotion?
+    int isFastMotion = 1;
+    int num_old_trackpts = 0;
     // image points
     std::vector<uint32_t> mvPtCount;
     std::vector<cv::Point2f> mv_uv;

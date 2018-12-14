@@ -9,6 +9,7 @@ SimpleBackEnd::SimpleBackEnd(const SimpleStereoCamPtr& camera,
                              const SlidingWindowPtr& sliding_window)
     : mState(INIT), mpCamera(camera), mpSlidingWindow(sliding_window)
 {
+    max_len = sliding_window->max_len;
 }
 
 SimpleBackEnd::~SimpleBackEnd() {}
@@ -37,6 +38,8 @@ void SimpleBackEnd::Process() {
 
                 // solve the sliding window BA
                 SlidingWindowBA(keyframe);
+
+                //TODO:: when keyframe is droped from SlidingWindow and push to PoseGraph.
                 PubFrameToPoseGraph(keyframe);
                 // add to sliding window
                 mpSlidingWindow->push_kf(keyframe);
@@ -90,7 +93,13 @@ void SimpleBackEnd::PubFrameToPoseGraph(const FramePtr& keyframe) {
     //TODO::need lock?
     if(!mPoseGraphCallback)
         return;
-    mPoseGraphCallback(keyframe);
+    if(keyframe->isFastMotion==0)
+    {
+        mPoseGraphCallback(keyframe);
+    }
+    else{
+      return;
+    }
 }
 
 void SimpleBackEnd::SetPoseGraphCallback(const std::function<void(const FramePtr keyframe)>& PG_callback){

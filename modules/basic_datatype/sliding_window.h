@@ -19,10 +19,10 @@ public:
 
     std::vector<FramePtr> get_kfs() const;
     std::vector<MapPointPtr> get_mps();
-
     std::mutex big_mutex;
-private:
     int max_len;
+private:
+
     mutable std::mutex kfs_mutex;
     mutable std::mutex mps_mutex;
     std::deque<FramePtr> kfs_buffer;

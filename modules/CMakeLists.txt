@@ -8,7 +8,7 @@ if ("$ENV{CROSS_COMPILE_FLAG}" STREQUAL "XU4")
   SET(CMAKE_SYSTEM_PROCESSOR armv7l)
   SET(CMAKE_C_COMPILER /usr/bin/arm-linux-gnueabihf-gcc)
   SET(CMAKE_CXX_COMPILER /usr/bin/arm-linux-gnueabihf-g++)
-  SET(CMAKE_BUILD_TYPE Release)
+  SET(CMAKE_BUILD_TYPE Debug)
 endif()
 
 # If on OSX, force cmake to use gcc-6/5 instead of the built-in gcc (AppleClang)
@@ -142,6 +142,7 @@ back_end/imu_preintegration.cpp
 # back_end/isam2_backend.cpp
 back_end/simple_backend.cpp
 pose_graph/simple_pose_graph.cpp
+pose_graph/utility.cpp
 ceres/projection_factor.cpp
 ceres/marginalization_factor.cpp
 system/vo_system.cpp

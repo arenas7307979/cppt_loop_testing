@@ -203,6 +203,8 @@ void SimpleFrontEnd::TrackFeatLKWithEstimateTcr(const FrameConstPtr& ref_frame,
         }
     }
 
+    cur_frame->num_old_trackpts = ref_frame_pts.size();
+
     // optical flow
     std::vector<uchar> status;
     std::vector<float> err;

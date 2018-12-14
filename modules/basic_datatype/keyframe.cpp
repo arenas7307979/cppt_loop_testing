@@ -2,6 +2,7 @@
 #include "util_datatype.h"
 #include "front_end/utility.h"
 #include "keyframe.h"
+#include "tracer.h"
 
 static float IC_Angle(const cv::Mat& image, cv::Point2f pt,  std::vector<int> & u_max)
 {
@@ -48,28 +49,47 @@ static float IC_Angle(const cv::Mat& image, cv::Point2f pt,  std::vector<int> & 
 
 static void computeOrientation(const cv::Mat& image, std::vector<cv::KeyPoint>& keypoints,  std::vector<int>& umax)
 {
-    for (std::vector<cv::KeyPoint>::iterator keypoint = keypoints.begin(),
-         keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint)
-    {
-        keypoint->angle = IC_Angle(image, keypoint->pt, umax);
+    for(int i=0; i<keypoints.size(); i++){
+        keypoints[i].angle = IC_Angle(image, keypoints[i].pt, umax);
     }
 }
 
-Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax){
+
+
+void Keyframe::setRelativeInfo(Sophus::SE3d &relative_T_, bool &has_loop_, double &relative_yaw_ ,uint64_t Match_loop_index_){
+    relative_T = relative_T_;
+    has_loop = has_loop_;
+    relative_yaw = relative_yaw_;
+    Match_loop_index = Match_loop_index_;
+}
+
+void Keyframe::getRelativeInfo(Sophus::SE3d &relative_T_, double &relative_yaw_ , uint64_t Match_loop_index_){
+    relative_T_ =      relative_T ;
+    relative_yaw_ = relative_yaw ;
+    Match_loop_index_ =   Match_loop_index;
+}
+
+void Keyframe::updateVioPose(Sophus::SE3d &mTwc_loop){
+    mTwc = mTwc_loop;
+}
+Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax, uint64_t frame_index){
+    ScopedTrace st("Keyframe");
     //TODO:: stereo matching to increase mappoint of this keyframe.
     mKeyFrameID = frame->mKeyFrameID;
     mTwc = frame->mTwc;
     mNumStereo = frame->mNumStereo;
-
+    indexInLoop = frame_index;
 #if DEBUG_POSEGRAPH
     mImgL = frame->mImgL.clone();
 #endif
 
+    k_pts.clear();
     int image_rows = frame->mImgL.rows;
     int image_cols = frame->mImgL.cols;
     for(int i=0; i<frame->mv_uv.size(); i++){
         if(!frame->mvMapPoint[i] || frame->mvMapPoint[i]->empty())
             continue;
+
         //remove border point
         if (frame->mv_uv[i].x < 20 || frame->mv_uv[i].y < 20 || frame->mv_uv[i].x >= image_cols - 20
                 || frame->mv_uv[i].y >= image_rows - 20) {
@@ -78,15 +98,16 @@ Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax){
 
         mvPtCount.push_back(frame->mvPtCount[i]);
         mv_uv.push_back(frame->mv_uv[i]);
-        mvMapPoint.push_back(frame->mvMapPoint[i]);
+        x3Dws.push_back(frame->mvMapPoint[i]->x3Dw());
         cv::KeyPoint tmp_mv_uv;
         tmp_mv_uv.pt = frame->mv_uv[i];
         tmp_mv_uv.octave = 0;
         tmp_mv_uv.size = 31;
         k_pts.push_back(tmp_mv_uv);
     }
+
     std::vector<cv::KeyPoint> tmp_keypoint;
-    cv::FAST(frame->mImgL, tmp_keypoint, 20, true);
+    cv::FAST(frame->mImgL, tmp_keypoint, 15, true);
     for(int i=0; i<tmp_keypoint.size(); i++){
         //remove border point
         if (tmp_keypoint[i].pt.x < 20 || tmp_keypoint[i].pt.y < 20 || tmp_keypoint[i].pt.x >= image_cols - 20
@@ -94,6 +115,7 @@ Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax){
             continue;
         }
         tmp_keypoint[i].size = 31;
+        tmp_keypoint[i].octave = 0;
         k_pts.push_back(tmp_keypoint[i]);
     }
 
@@ -107,7 +129,9 @@ Keyframe::~Keyframe(){};
 
 
 void Keyframe::computeORBDescriptors(const FramePtr frame){
+    ScopedTrace st("computeORBDescriptors");
     cv::Mat tmp_descriptors = cv::Mat::zeros((int)k_pts.size(), 32, CV_8UC1);
+    //TODO:: not use openCV
     cv::Ptr<cv::DescriptorExtractor> extractor = cv::ORB::create();
     extractor->compute(frame->mImgL, k_pts, tmp_descriptors);
     changeORBdescStructure(tmp_descriptors, descriptors);
@@ -123,3 +147,4 @@ void Keyframe::changeORBdescStructure(const cv::Mat &plain, std::vector<cv::Mat>
         out[i] = plain.row(i);
     }
 }
+

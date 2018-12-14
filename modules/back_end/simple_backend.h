@@ -47,8 +47,10 @@ private:
     // callback function
     std::function<void(const std::vector<Sophus::SE3d>&,
                        const VecVector3d&)> mDebugCallback;
+    std::function<void(const FramePtr keyframe)> mPoseGraphCallback;
 
-   std::function<void(const FramePtr keyframe)> mPoseGraphCallback;
+    //Max slide windows
+    int max_len;
 };
 
 SMART_PTR(SimpleBackEnd)
