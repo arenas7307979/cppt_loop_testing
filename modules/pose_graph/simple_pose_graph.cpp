@@ -123,7 +123,7 @@ void SimplePoseGraph::Process(){
                         Sophus::SE3d relative_T;
                         bool has_loop;
                         double relative_yaw;
-                        uint64_t loop_index;
+                        int loop_index;
                         cur_kf->getRelativeInfo(relative_T, has_loop, relative_yaw, loop_index);
 
                         //Estimate new Curr Pose Twcur_new
@@ -160,7 +160,7 @@ void SimplePoseGraph::optimize6DoF(){
         int cur_index = -1;
         int first_looped_index = -1;
         //save frame from the Back-End when pose graph slow than back-end
-        std::vector<uint64_t> optimizeBuffer;
+        std::vector<int> optimizeBuffer;
         std::unique_lock<std::mutex> lock(m_optimize_buf);
         mOptimizeBuffer.wait(lock, [&]{
             optimizeBuffer = optimize_buf;
@@ -179,8 +179,8 @@ void SimplePoseGraph::optimize6DoF(){
 
             std::unique_lock<std::mutex> lock(keyframesMutex);
 
-            auto it = keyframes.find(cur_index);
-            KeyframePtr cur_kf = it->second;
+            auto cur_ptr = keyframes.find(cur_index);
+            KeyframePtr cur_kf = cur_ptr->second;
             int max_length = cur_index + 1;
 
             //ceres optimizer
@@ -193,21 +193,87 @@ void SimplePoseGraph::optimize6DoF(){
             ceres::Solver::Summary summary;
             ceres::LossFunction *loss_function;
             loss_function = new ceres::HuberLoss(0.1);
-            ceres::LocalParameterization *pose_vertex = new Sophus::VertexSE3();
+            //ceres::LocalParameterization *pose_vertex = new Sophus::VertexSE3();
+            ceres::LocalParameterization* local_parameterization = new ceres::QuaternionParameterization();
             //set vertex
             int i = 0;
-            for (std::map<uint64_t,KeyframePtr>::iterator
+            for (std::map<int,KeyframePtr>::iterator
                  it=keyframes.begin(); it!=keyframes.end(); ++it){
                 //older than first_looped_index
                 if ((it)->first < first_looped_index)
                     continue;
 
+                //Add vertex
                 it->second->local_index = i;
+
                 std::memcpy(it->second->vertex_data, it->second->mTwc.data(), sizeof(double) * 7);
-                problem.AddParameterBlock(it->second->vertex_data, 7 , pose_vertex);
+
+                for(int k=0;k<4; k++){
+                    std::memcpy(it->second->c_rotation, it->second->mTwc.data(), sizeof(double) * 4);
+                }
+
+                //Sophus Quaternion is qx,y,z, qw;
+                //In ceres::Quaternion is qw, qx,y, z
+                double tmp_qw = it->second->c_rotation[3];
+                it->second->c_rotation[3] = it->second->c_rotation[2];
+                it->second->c_rotation[2] = it->second->c_rotation[1];
+                it->second->c_rotation[1] = it->second->c_rotation[0];
+                it->second->c_rotation[0] = tmp_qw;
+
+                for(int k=0;k<4; k++){
+                    std::memcpy(it->second->c_translation, it->second->mTwc.data()+4, sizeof(double) * 3);
+                }
+
+
+                problem.AddParameterBlock(it->second->c_rotation, 4 , local_parameterization);
+                problem.AddParameterBlock(it->second->c_translation, 3);
+
+
+
+                for(int k=0;k<4; k++){
+                    std::cout << "c_rotation=" << *(keyframes[i]->c_rotation+ k) <<std::endl;
+                }
+
+                for(int k=0;k<3; k++){
+                    std::cout << "c_translation=" << *(keyframes[i]->c_translation+ k) <<std::endl;
+                }
+
+                for(int k=0;k<7; k++){
+                    std::cout << "@@@@i=" << i  <<std::endl;
+                    std::cout << "TiMinusj_=" << *(keyframes[i]->vertex_data+ k) <<std::endl;
+                }
+                //Eigen::Map<const Sophus::SE3d> TiMinusj(keyframes[i]->vertex_data);
+                std::cout << "TiMinusj_T=" << it->second->mTwc.translation() <<std::endl;
 
                 //set constant start keyframe
-                if((it)->first = )
+                if((it)->first == first_looped_index){
+                    problem.SetParameterBlockConstant(it->second->c_rotation);
+                    problem.SetParameterBlockConstant(it->second->c_translation);
+                }
+
+
+                //Add edge of pose that previous 5keyframe as constriant.
+                //                for (int j = 1; j < 5; j++)
+                //                {
+                //                    if (i - j >= 0)
+                //                    {
+
+                //                        //Estimate (Twi-j).inverse * (Twi)
+                //                        ceres::CostFunction* cost_function = SixDOFError::Create(keyframes[i-j]->mTwc.inverse() * keyframes[i]->mTwc);
+
+                //                        //input parameter Ti-j, Ti
+                //                        problem.AddResidualBlock(cost_function, NULL, keyframes[i-j]->vertex_data, keyframes[i]->vertex_data);
+
+                //                    }
+                //                }
+
+                //Add loop detection edge, if this have been find loop-detection
+                if(it->second->has_loop){
+
+                }
+
+
+
 
 
                 if ((it)->first == cur_index)
@@ -419,7 +485,7 @@ bool SimplePoseGraph::FindKFConnect(KeyframePtr& cur_kf, KeyframePtr& old_kf){
             //set loop info to cur_kf
             double relative_yaw = Utility::normalizeAngle(Utility::R2ypr(cur_kf->mTwc.rotationMatrix()).x() - Utility::R2ypr(Tcw_cur.inverse().rotationMatrix()).x());
             bool has_loop = true;
-            uint64_t loop_index = old_kf->indexInLoop;
+            int loop_index = old_kf->indexInLoop;
             Sophus::SE3d relative_T = Tcw_cur.inverse() * cur_kf->mTwc;
             cur_kf->setRelativeInfo(relative_T, has_loop, relative_yaw, loop_index);
             return true;

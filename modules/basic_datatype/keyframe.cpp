@@ -56,14 +56,14 @@ static void computeOrientation(const cv::Mat& image, std::vector<cv::KeyPoint>& 
 
 
 
-void Keyframe::setRelativeInfo(Sophus::SE3d &relative_T_, bool &has_loop_, double &relative_yaw_ ,uint64_t Match_loop_index_){
+void Keyframe::setRelativeInfo(Sophus::SE3d &relative_T_, bool &has_loop_, double &relative_yaw_ ,int Match_loop_index_){
     relative_T = relative_T_;
     has_loop = has_loop_;
     relative_yaw = relative_yaw_;
     Match_loop_index = Match_loop_index_;
 }
 
-void Keyframe::getRelativeInfo(Sophus::SE3d &relative_T_, double &relative_yaw_ , uint64_t Match_loop_index_){
+void Keyframe::getRelativeInfo(Sophus::SE3d &relative_T_, double &relative_yaw_ , int Match_loop_index_){
     relative_T_ =      relative_T ;
     relative_yaw_ = relative_yaw ;
     Match_loop_index_ =   Match_loop_index;
@@ -72,7 +72,7 @@ void Keyframe::getRelativeInfo(Sophus::SE3d &relative_T_, double &relative_yaw_ 
 void Keyframe::updateVioPose(Sophus::SE3d &mTwc_loop){
     mTwc = mTwc_loop;
 }
-Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax, uint64_t frame_index){
+Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax, int frame_index){
     ScopedTrace st("Keyframe");
     //TODO:: stereo matching to increase mappoint of this keyframe.
     mKeyFrameID = frame->mKeyFrameID;
