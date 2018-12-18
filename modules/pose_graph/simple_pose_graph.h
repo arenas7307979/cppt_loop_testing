@@ -11,6 +11,8 @@
 #include "basic_datatype/keyframe.h"
 #include "camera_model/simple_stereo_camera.h"
 #include <opencv2/core/eigen.hpp>
+#include "ceres/ceres.h"
+
 
 class SimplePoseGraph{
 public:
@@ -62,7 +64,7 @@ private:
 
     //index in the loop
     int db_index = 0;
-    int earliest_loop_index;
+    int earliest_loop_index = -1;
 
     //Drift is optimize6DoF reult,
     //represent drift between original path and after loop-optimize path
@@ -100,49 +102,32 @@ private:
 #endif
 };
 
-
 struct SixDOFError
 {
     SixDOFError(Sophus::SE3d relativePose)
-                  :relativePose(relativePose){}
+        :relativePose(relativePose){}
 
-    template <typename T>
-    bool operator()(const T* const TiMinusj_, const T* Ti_, T* residuals) const
+    template <typename T> // Tw1                         Tw2
+    bool operator()(const T*  TiMinusj_, const T* Ti_ , T* residuals) const
     {
-//          Eigen::Map<const Sophus::SE3d> TiMinusj(TiMinusj_[0]);
-//        Eigen::Map<Sophus::SE3d> Ti(Ti_);
-
-//        std::cout << "TiMinusj=" << TiMinusj.translation() <<std::endl;
-//        for(int i=0; i<7; i++){
-//         std::cout << "TiMinusj_=" << TiMinusj_[i] <<std::endl;
-//        }
-//        T t_w_ij[3];
-//        t_w_ij[0] = tj[0] - ti[0];
-//        t_w_ij[1] = tj[1] - ti[1];
-//        t_w_ij[2] = tj[2] - ti[2];
-
-        // euler to rotation
-        T w_R_i[9];
-//        YawPitchRollToRotationMatrix(yaw_i[0], T(pitch_i), T(roll_i), w_R_i);
-        // rotation transpose
-        T i_R_w[9];
-//        RotationMatrixTranspose(w_R_i, i_R_w);
-        // rotation matrix rotate point
-        T t_i_ij[3];
-//        RotationMatrixRotatePoint(i_R_w, t_w_ij, t_i_ij);
+        Eigen::Map<const Sophus::SE3<T>> TiMinusj(TiMinusj_);
+        Eigen::Map<const Sophus::SE3<T>> Ti(Ti_);
+        Eigen::Map<Eigen::Matrix<T, 6, 1>> residual(residuals);
+        Sophus::SE3<T> new_relative_pose = TiMinusj.inverse() * Ti; // T12
+        Sophus::SE3<T> residual_T =  relativePose.inverse() * new_relative_pose ;
+        Eigen::Quaternion<T> q = residual_T.unit_quaternion();
+        residual.head(3) = residual_T.translation();
+        residual.tail(3) << (q.x(), q.y(), q.z());
 
         return true;
     }
 
     static ceres::CostFunction* Create(const Sophus::SE3d relativePose)
     {
-      return (new ceres::AutoDiffCostFunction<
-              SixDOFError, 7, 7, 7>(
-                new SixDOFError(relativePose)));
+        return (new ceres::AutoDiffCostFunction<SixDOFError, 6, 7, 7>(
+                    new SixDOFError(relativePose)));
     }
-
-    Sophus::SE3d relativePose;
+    Sophus::SE3d relativePose; // T12
 };
-
 
 SMART_PTR(SimplePoseGraph)

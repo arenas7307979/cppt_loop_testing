@@ -24,9 +24,9 @@ public:
     void computeORBDescriptors(const FramePtr frame);
 
     //save MatchKeyframe info (relative pose) in pose graph
-    void setRelativeInfo(Sophus::SE3d &relative_T_, bool &has_loop_, double &relative_yaw_ ,int Match_loop_index_);
+    void setRelativeInfo(Sophus::SE3d &relative_T_, bool &has_loop_, double &relative_yaw_ ,int &Match_loop_index_);
 
-    void getRelativeInfo(Sophus::SE3d &relative_T_, double &relative_yaw_ ,int Match_loop_index);
+    void getRelativeInfo(Sophus::SE3d &relative_T_, double &relative_yaw_ ,int& Match_loop_index);
 
     void updateVioPose(Sophus::SE3d &mTwc_loop);
 
@@ -53,20 +53,18 @@ public:
     double mTimeStamp;
 
     // ceres solver to optimize pose
-    double c_rotation[4];
-    double c_translation[3];
     double vertex_data[7];
 
     // have been finding loop
-    bool has_loop;
+    bool has_loop = false;
 private:
     void changeORBdescStructure(const cv::Mat &plain, std::vector<cv::Mat> &out);
 
     //save MatchKeyframe info (relative pose) in pose graph
-    int Match_loop_index=-1;
+    int Match_loop_index = -1;
     //Tc2c1, c2::Loop pose rom old keyframe info, c1:: cur pose from VO/VIO
     Sophus::SE3d relative_T;
-    double relative_yaw;
+    double relative_yaw = -1;
 };
 
 SMART_PTR(Keyframe)
