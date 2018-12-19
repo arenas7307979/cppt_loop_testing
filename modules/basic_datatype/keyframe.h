@@ -28,7 +28,7 @@ public:
 
     void getRelativeInfo(Sophus::SE3d &relative_T_, double &relative_yaw_ ,int& Match_loop_index);
 
-    void updateVioPose(Sophus::SE3d &mTwc_loop);
+    void updateVioPose(Eigen::Map<Sophus::SE3d> &mTwc_loop);
 
     int mKeyFrameID;
     Sophus::SE3d mTwc;
@@ -54,7 +54,8 @@ public:
 
     // ceres solver to optimize pose
     double vertex_data[7];
-
+    double c_rotation[4];
+    double c_translation[3];
     // have been finding loop
     bool has_loop = false;
 private:

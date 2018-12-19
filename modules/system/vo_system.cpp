@@ -99,7 +99,7 @@ VOSystem::VOSystem(const std::string& config_file) {
     // create backend thread
     mtBackEnd = std::thread(&SimpleBackEnd::Process, mpBackEnd);
     mtPoseGraph = std::thread(&SimplePoseGraph::Process, poseGraph);
-    mtPoseGraph6Opt = std::thread(&SimplePoseGraph::optimize6DoF, poseGraph);
+    mtPoseGraph6DOF = std::thread(&SimplePoseGraph::optimize6DoF, poseGraph);
     mpBackEnd->SetPoseGraphCallback(poseGraph->mPoseGraphCallback);
 }
 

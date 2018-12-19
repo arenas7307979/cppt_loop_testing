@@ -52,6 +52,10 @@ public:
                                              std::placeholders::_1,
                                              std::placeholders::_2);
 
+        mpSystem->poseGraph->SetPoseDebugCallback(std::bind(&Node::PubPoseGraph, this,
+                                             std::placeholders::_1,
+                                             std::placeholders::_2));
+
         fs.release();
     }
 
@@ -220,6 +224,44 @@ public:
         }
     }
 
+
+
+    void PubPoseGraph(const std::vector<Sophus::SE3d>& v_Twc,
+                          const int& twc_type) {
+        if(v_Twc.empty())
+            return;
+
+        static Sophus::SE3d Tglw = Sophus::SE3d::rotX(-M_PI/2);
+
+        { // print keyframe point
+            visualization_msgs::Marker PoseGraphPoses;
+            PoseGraphPoses.header.frame_id = "world";
+            PoseGraphPoses.ns = "PoseGraph";
+            PoseGraphPoses.type = visualization_msgs::Marker::SPHERE_LIST;
+            PoseGraphPoses.action = visualization_msgs::Marker::ADD;
+            PoseGraphPoses.pose.orientation.w = 1.0;
+            PoseGraphPoses.lifetime = ros::Duration();
+
+            PoseGraphPoses.id = 0;
+            PoseGraphPoses.scale.x = 0.1;
+            PoseGraphPoses.scale.y = 0.1;
+            PoseGraphPoses.scale.z = 0.1;
+            PoseGraphPoses.color.r = 1.0;
+            PoseGraphPoses.color.g = 1.0;
+            PoseGraphPoses.color.a = 1.0;
+
+            for(auto& Twc : v_Twc) {
+                Eigen::Vector3d twc = (Tglw*Twc).translation();
+                geometry_msgs::Point pose_marker;
+                pose_marker.x = twc(0);
+                pose_marker.y = twc(1);
+                pose_marker.z = twc(2);
+                PoseGraphPoses.points.emplace_back(pose_marker);
+            }
+            pub_posegraph.publish(PoseGraphPoses);
+        }
+    }
+
     void PubCurPose(const Sophus::SE3d& Twc, double timestamp) {
         static Sophus::SE3d Tglw = Sophus::SE3d::rotX(-M_PI/2);
         // public latest frame
@@ -267,7 +309,7 @@ public:
     ros::Publisher pub_camera_pose;
     ros::Publisher pub_keyframes;
     ros::Publisher pub_mappoints;
-
+    ros::Publisher pub_posegraph;
     CameraPoseVisualization camera_pose_visual;
 };
 
@@ -314,6 +356,7 @@ int main(int argc, char** argv) {
     node.pub_camera_pose = nh.advertise<visualization_msgs::MarkerArray>("camera_pose", 1000);
     node.pub_keyframes = nh.advertise<visualization_msgs::Marker>("keyframes", 1000);
     node.pub_mappoints = nh.advertise<visualization_msgs::Marker>("mappoints", 1000);
+    node.pub_posegraph = nh.advertise<visualization_msgs::Marker>("poseGraph", 1000);
     ROS_INFO_STREAM("Player is ready.");
 
     ros::spin();

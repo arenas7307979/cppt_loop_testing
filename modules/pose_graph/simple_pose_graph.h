@@ -27,9 +27,12 @@ public:
     //add keyframe from BackEnd
     void AddKeyFrameAfterBA(const FramePtr& frame);
 
-    void SetPoseGraphCallback(const std::function<void(const FramePtr keyframe)>& PG_callback);
+    void SetPoseGraphCallback(const std::function<void(const FramePtr)>& PG_callback);
 
-    std::function<void(const FramePtr keyframe)> mPoseGraphCallback;
+    //Set debugCallback
+    void SetPoseDebugCallback(const std::function<void(const std::vector<Sophus::SE3d>&, const int& twc_type)>& callback);
+
+    std::function<void(const FramePtr)> mPoseGraphCallback;
 
     //Pose graph optimizer
     void optimize6DoF();
@@ -37,9 +40,13 @@ public:
     PoseGraphyState mState;
 
 private:
-    SimpleStereoCamPtr mpCamera;
 
+    void ShowPoseGraphResultGUI(std::vector<Sophus::SE3d>& keyframes_Twc, int twc_type) const;
+
+    //LoadORBVocabulary
     bool LoadORBVocabulary(std::string& voc_path);
+
+    //Query DBOW database for find similar keyframe.
     int  LoopDetection(const KeyframePtr& keyframe, const int& db_id);
 
     //find connection between cur_keyframe and old_keyframe(from dbow query)
@@ -66,15 +73,14 @@ private:
     int db_index = 0;
     int earliest_loop_index = -1;
 
-    //Drift is optimize6DoF reult,
-    //represent drift between original path and after loop-optimize path
-    Sophus::SE3d T_drift;
-
     //Pose graph optimizer may slower than loop-detection
     //that for save keyframe index.
     std::vector<int> optimize_buf;
     std::mutex m_optimize_buf;
     std::condition_variable mOptimizeBuffer;
+
+    //Camera instric Parameter
+    SimpleStereoCamPtr mpCamera;
 
     //check frame
     Eigen::Vector3d last_t;
@@ -93,8 +99,17 @@ private:
     std::vector<int> umax;
 
     //save keyframes info in pose graph.
-    map<int, KeyframePtr> keyframes;
+    std::vector<KeyframePtr> keyframes;
     std::mutex keyframesMutex;
+
+
+    //Drift is optimize6DoF reult,
+    //represent drift between original path and after loop-optimize path
+    Sophus::SE3d T_drift;
+    std::mutex m_drift;
+
+    //debug for LC callback function
+    std::function<void(const std::vector<Sophus::SE3d>&, int& twc_type)> mDebugCallback;
 
 #if DEBUG_POSEGRAPH
     //for debug
@@ -114,20 +129,82 @@ struct SixDOFError
         Eigen::Map<const Sophus::SE3<T>> Ti(Ti_);
         Eigen::Map<Eigen::Matrix<T, 6, 1>> residual(residuals);
         Sophus::SE3<T> new_relative_pose = TiMinusj.inverse() * Ti; // T12
-        Sophus::SE3<T> residual_T =  relativePose.inverse() * new_relative_pose ;
-        Eigen::Quaternion<T> q = residual_T.unit_quaternion();
-        residual.head(3) = residual_T.translation();
-        residual.tail(3) << (q.x(), q.y(), q.z());
-
+        Sophus::SE3<T> residual_T =  relativePose.inverse().template cast<T>() * new_relative_pose ;
+        //Eigen::Quaternion<T> q = residual_T.unit_quaternion();
+        //residual.head(3) = residual_T.translation();
+        //residual.tail(3) << (q.x(), q.y(), q.z());
+        residual.head(6) = residual_T.log();
         return true;
     }
 
-    static ceres::CostFunction* Create(const Sophus::SE3d relativePose)
+    static ceres::CostFunction* Create(const Sophus::SE3d& relativePose)
     {
         return (new ceres::AutoDiffCostFunction<SixDOFError, 6, 7, 7>(
                     new SixDOFError(relativePose)));
     }
     Sophus::SE3d relativePose; // T12
 };
+
+
+//https://blog.csdn.net/HUAJUN998/article/details/76166307
+
+class PoseGraph3dErrorTerm {
+ public:
+  PoseGraph3dErrorTerm(const Sophus::SE3d& relativePose,
+                       const Eigen::Matrix<double, 6, 6>& sqrt_information)
+      : relativePose(relativePose), sqrt_information_(sqrt_information) {}
+
+  template <typename T>
+  bool operator()(const T* const p_a_ptr, const T* const q_a_ptr,
+                  const T* const p_b_ptr, const T* const q_b_ptr,
+                  T* residuals_ptr) const {
+
+    Eigen::Map<const Eigen::Matrix<T, 3, 1> > p_a(p_a_ptr);
+
+    Eigen::Map<const Eigen::Quaternion<T> > q_a(q_a_ptr);
+
+    Eigen::Map<const Eigen::Matrix<T, 3, 1> > p_b(p_b_ptr);
+    Eigen::Map<const Eigen::Quaternion<T> > q_b(q_b_ptr);
+
+    // Compute the relative transformation between the two frames.
+
+    Eigen::Quaternion<T> q_a_inverse = q_a.conjugate();
+
+    Eigen::Quaternion<T> q_ab_estimated = q_a_inverse * q_b;
+
+
+    Eigen::Matrix<T, 3, 1> p_ab_estimated = q_a_inverse * (p_b - p_a);
+
+
+    Eigen::Quaternion<T> delta_q =
+        relativePose.unit_quaternion().template cast<T>() * q_ab_estimated.conjugate();
+
+
+    Eigen::Map<Eigen::Matrix<T, 6, 1> > residuals(residuals_ptr);
+    residuals.template block<3, 1>(0, 0) =
+        p_ab_estimated - relativePose.translation().template cast<T>();
+    residuals.template block<3, 1>(3, 0) = T(2.0) * delta_q.vec();
+
+    residuals.applyOnTheLeft(sqrt_information_.template cast<T>());
+
+    return true;
+  }
+
+  static ceres::CostFunction* Create(
+      const  Sophus::SE3d &relativePose,
+      const Eigen::Matrix<double, 6, 6>& sqrt_information) {
+    return new ceres::AutoDiffCostFunction<PoseGraph3dErrorTerm, 6, 3, 4, 3, 4>(
+        new PoseGraph3dErrorTerm(relativePose, sqrt_information));
+  }
+
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+ private:
+  // The measurement for the position of B relative to A in the A frame.
+  const  Sophus::SE3d relativePose;
+  // The square root of the measurement information matrix.
+  const Eigen::Matrix<double, 6, 6> sqrt_information_;
+};
+
 
 SMART_PTR(SimplePoseGraph)

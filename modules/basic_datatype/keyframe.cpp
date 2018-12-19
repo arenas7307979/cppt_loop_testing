@@ -69,14 +69,17 @@ void Keyframe::getRelativeInfo(Sophus::SE3d &relative_T_, double &relative_yaw_ 
     Match_loop_index_ =   Match_loop_index;
 }
 
-void Keyframe::updateVioPose(Sophus::SE3d &mTwc_loop){
+void Keyframe::updateVioPose(Eigen::Map<Sophus::SE3d>& mTwc_loop){
     mTwc = mTwc_loop;
 }
 Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax, int frame_index){
     ScopedTrace st("Keyframe");
     //TODO:: stereo matching to increase mappoint of this keyframe.
     mKeyFrameID = frame->mKeyFrameID;
-    mTwc = frame->mTwc;
+    double vector_mTwc[7];
+    std::memcpy(vector_mTwc, frame->mTwc.data(), sizeof(double)*7);
+    Eigen::Map<Sophus::SE3d> mTwc_copy (vector_mTwc);
+    mTwc = mTwc_copy;
     mNumStereo = frame->mNumStereo;
     indexInLoop = frame_index;
 #if DEBUG_POSEGRAPH
