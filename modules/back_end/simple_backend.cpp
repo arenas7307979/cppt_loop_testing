@@ -10,6 +10,26 @@ SimpleBackEnd::SimpleBackEnd(const SimpleStereoCamPtr& camera,
     : mState(INIT), mpCamera(camera), mpSlidingWindow(sliding_window)
 {
     max_len = sliding_window->max_len;
+    //for IC angle of ORB descriptor
+    umax.resize(HALF_PATCH_SIZE + 1);
+
+    //from ORBSLAM for estiamte IC angle
+    //pre-compute the end of a row in a circular patch
+    int v, v0, vmax = cvFloor(HALF_PATCH_SIZE * sqrt(2.f) / 2 + 1);
+    int vmin = cvCeil(HALF_PATCH_SIZE * sqrt(2.f) / 2);
+    const double hp2 = HALF_PATCH_SIZE*HALF_PATCH_SIZE;
+    for (v = 0; v <= vmax; ++v)
+        umax[v] = cvRound(sqrt(hp2 - v * v));
+
+    // Make sure we are symmetric
+    for (v = HALF_PATCH_SIZE, v0 = 0; v >= vmin; --v)
+    {
+        while (umax[v0] == umax[v0 + 1])
+            ++v0;
+
+        umax[v] = v0;
+        ++v0;
+    }
 }
 
 SimpleBackEnd::~SimpleBackEnd() {}
@@ -39,8 +59,6 @@ void SimpleBackEnd::Process() {
                 // solve the sliding window BA
                 SlidingWindowBA(keyframe);
 
-                //TODO:: when keyframe is droped from SlidingWindow and push to PoseGraph.
-                PubFrameToPoseGraph(keyframe);
                 // add to sliding window
                 mpSlidingWindow->push_kf(keyframe);
             }
@@ -89,20 +107,15 @@ void SimpleBackEnd::ShowResultGUI() const {
 }
 
 
-void SimpleBackEnd::PubFrameToPoseGraph(const FramePtr& keyframe) {
+void SimpleBackEnd::PubFrameToPoseGraph(const KeyframePtr& keyframe) {
     //TODO::need lock?
     if(!mPoseGraphCallback)
         return;
-    if(keyframe->isFastMotion==0)
-    {
-        mPoseGraphCallback(keyframe);
-    }
-    else{
-      return;
-    }
+
+    mPoseGraphCallback(keyframe);
 }
 
-void SimpleBackEnd::SetPoseGraphCallback(const std::function<void(const FramePtr keyframe)>& PG_callback){
+void SimpleBackEnd::SetPoseGraphCallback(const std::function<void(const KeyframePtr)>& PG_callback){
     mPoseGraphCallback = PG_callback;
 }
 
@@ -248,5 +261,14 @@ void SimpleBackEnd::SlidingWindowBA(const FramePtr& new_keyframe) {
             continue;
         Eigen::Map<Eigen::Vector3d> x3Dw(mps_in_sliding_window[i]->vertex_data);
         mps_in_sliding_window[i]->Set_x3Dw(x3Dw);
+    }
+
+    //TODO::move to pose graph
+    //Convert frame to keyframe and pub to pose graph.
+    if(sliding_window.size() >= mpSlidingWindow->max_len){
+        auto& frame = sliding_window[0];
+
+        KeyframePtr cur_kf = std::make_shared<Keyframe>(sliding_window[0], umax);
+        PubFrameToPoseGraph(cur_kf);
     }
 }

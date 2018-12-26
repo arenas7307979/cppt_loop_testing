@@ -72,7 +72,7 @@ void Keyframe::getRelativeInfo(Sophus::SE3d &relative_T_, double &relative_yaw_ 
 void Keyframe::updateVioPose(Eigen::Map<Sophus::SE3d>& mTwc_loop){
     mTwc = mTwc_loop;
 }
-Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax, int frame_index){
+Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax){
     ScopedTrace st("Keyframe");
     //TODO:: stereo matching to increase mappoint of this keyframe.
     mKeyFrameID = frame->mKeyFrameID;
@@ -81,11 +81,9 @@ Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax, int frame_index
     Eigen::Map<Sophus::SE3d> mTwc_copy (vector_mTwc);
     mTwc = mTwc_copy;
     mNumStereo = frame->mNumStereo;
-    indexInLoop = frame_index;
 #if DEBUG_POSEGRAPH
     mImgL = frame->mImgL.clone();
 #endif
-
     k_pts.clear();
     int image_rows = frame->mImgL.rows;
     int image_cols = frame->mImgL.cols;
@@ -125,18 +123,18 @@ Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax, int frame_index
     //Compute angle of points from tmp_mv_uv
     computeOrientation(frame->mImgL, k_pts, umax);
     //Compute ORB desc
-    computeORBDescriptors(frame);
+    computeORBDescriptors(frame->mImgL);
 }
 
 Keyframe::~Keyframe(){};
 
 
-void Keyframe::computeORBDescriptors(const FramePtr frame){
+void Keyframe::computeORBDescriptors(const cv::Mat &mImgL){
     ScopedTrace st("computeORBDescriptors");
     cv::Mat tmp_descriptors = cv::Mat::zeros((int)k_pts.size(), 32, CV_8UC1);
     //TODO:: not use openCV
     cv::Ptr<cv::DescriptorExtractor> extractor = cv::ORB::create();
-    extractor->compute(frame->mImgL, k_pts, tmp_descriptors);
+    extractor->compute(mImgL, k_pts, tmp_descriptors);
     changeORBdescStructure(tmp_descriptors, descriptors);
 }
 

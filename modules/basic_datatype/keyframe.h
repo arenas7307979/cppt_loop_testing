@@ -7,7 +7,7 @@
 #include "frame.h"
 #include <opencv2/core/eigen.hpp>
 
-#define DEBUG_POSEGRAPH 1
+#define DEBUG_POSEGRAPH 0
 class MapPoint;
 SMART_PTR(MapPoint)
 
@@ -18,10 +18,10 @@ const int EDGE_THRESHOLD = 19;
 class Keyframe : public std::enable_shared_from_this<Keyframe> {
 public:
 
-    Keyframe(const FramePtr frame,  std::vector<int>& umax, int frame_index);
+    Keyframe(const FramePtr frame,  std::vector<int>& umax);
     ~Keyframe();
 
-    void computeORBDescriptors(const FramePtr frame);
+    void computeORBDescriptors(const cv::Mat &mImgL);
 
     //save MatchKeyframe info (relative pose) in pose graph
     void setRelativeInfo(Sophus::SE3d &relative_T_, bool &has_loop_, double &relative_yaw_ ,int &Match_loop_index_);
@@ -56,6 +56,10 @@ public:
     double vertex_data[7];
     double c_rotation[4];
     double c_translation[3];
+
+    //for 4dof opt
+    Eigen::Quaterniond q_array;
+    double euler_array[3];
     // have been finding loop
     bool has_loop = false;
 private:

@@ -10,6 +10,7 @@
 #include <functional>
 #include "../ceres/marginalization_factor.h"
 #include "../pose_graph/simple_pose_graph.h"
+#include "../basic_datatype/keyframe.h"
 class SimpleBackEnd {
 public:
     enum BackEndState {
@@ -25,7 +26,7 @@ public:
     void AddKeyFrame(const FramePtr& keyframe);
     void SetDebugCallback(const std::function<void(const std::vector<Sophus::SE3d>&,
                                                    const VecVector3d&)>& callback);
-    void SetPoseGraphCallback(const std::function<void(const FramePtr keyframe)>& PG_callback);
+    void SetPoseGraphCallback(const std::function<void(const KeyframePtr)>& PG_callback);
     BackEndState mState;
 
 private:
@@ -33,7 +34,7 @@ private:
     void CreateMapPointFromStereoMatching(const FramePtr& keyframe);
     void CreateMapPointFromMotionTracking(const FramePtr& keyframe);
     void ShowResultGUI() const;
-    void PubFrameToPoseGraph(const FramePtr& keyframe);
+    void PubFrameToPoseGraph(const KeyframePtr& keyframe);
     void SlidingWindowBA(const FramePtr& new_keyframe);
 
     SimpleStereoCamPtr mpCamera;
@@ -47,10 +48,13 @@ private:
     // callback function
     std::function<void(const std::vector<Sophus::SE3d>&,
                        const VecVector3d&)> mDebugCallback;
-    std::function<void(const FramePtr keyframe)> mPoseGraphCallback;
+    std::function<void(const KeyframePtr)> mPoseGraphCallback;
 
     //Max slide windows
     int max_len;
+
+    //for keyframe IC angle
+    std::vector<int> umax;
 };
 
 SMART_PTR(SimpleBackEnd)

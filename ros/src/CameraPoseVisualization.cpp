@@ -95,7 +95,6 @@ void CameraPoseVisualization::add_loopedge(const Eigen::Vector3d& p0, const Eige
     m_markers.push_back(marker);
 }
 
-
 void CameraPoseVisualization::add_pose(const Eigen::Vector3d& p, const Eigen::Quaterniond& q) {
     visualization_msgs::Marker marker;
 
@@ -182,17 +181,18 @@ void CameraPoseVisualization::add_pose(const Eigen::Vector3d& p, const Eigen::Qu
     m_markers.push_back(marker);
 }
 
+
 void CameraPoseVisualization::reset() {
-	m_markers.clear();
+    m_markers.clear();
 }
 
 void CameraPoseVisualization::publish_by( ros::Publisher &pub, const std_msgs::Header &header ) {
-	visualization_msgs::MarkerArray markerArray_msg;
-	
-	for(auto& marker : m_markers) {
-		marker.header = header;
-		markerArray_msg.markers.push_back(marker);
-	}
+    visualization_msgs::MarkerArray markerArray_msg;
 
-	pub.publish(markerArray_msg);
+    for(auto& marker : m_markers) {
+        marker.header = header;
+        markerArray_msg.markers.push_back(marker);
+    }
+
+    pub.publish(markerArray_msg);
 }

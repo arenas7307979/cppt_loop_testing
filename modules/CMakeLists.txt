@@ -8,7 +8,7 @@ if ("$ENV{CROSS_COMPILE_FLAG}" STREQUAL "XU4")
   SET(CMAKE_SYSTEM_PROCESSOR armv7l)
   SET(CMAKE_C_COMPILER /usr/bin/arm-linux-gnueabihf-gcc)
   SET(CMAKE_CXX_COMPILER /usr/bin/arm-linux-gnueabihf-g++)
-  SET(CMAKE_BUILD_TYPE Debug)
+  SET(CMAKE_BUILD_TYPE Release)
 endif()
 
 # If on OSX, force cmake to use gcc-6/5 instead of the built-in gcc (AppleClang)
