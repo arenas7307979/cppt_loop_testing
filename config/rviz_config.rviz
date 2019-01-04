@@ -490,6 +490,14 @@ Visualization Manager:
       Marker Topic: /cppt_player/poseGraph
       Name: Marker
       Namespaces:
+        PoseGraph: true
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /cppt_player/loop_edge
+      Name: Marker
+      Namespaces:
         {}
       Queue Size: 100
       Value: true
@@ -516,25 +524,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 22.88133430480957
+      Distance: 14.929023742675781
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 2.7648072242736816
-        Y: -0.8931140899658203
+        X: 0.8408445119857788
+        Y: -1.9444999694824219
         Z: 2.0933786800014786e-5
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.515202522277832
+      Pitch: 0.9552022218704224
       Target Frame: <Fixed Frame>
       Value: XYOrbit (rviz)
-      Yaw: 4.75721549987793
+      Yaw: 4.717215538024902
     Saved: ~
 Window Geometry:
   Displays:
@@ -552,8 +560,8 @@ Window Geometry:
   Views:
     collapsed: true
   Width: 1390
-  X: 530
-  Y: 34
+  X: 2374
+  Y: 114
   loop_match_image:
     collapsed: false
   track_image:

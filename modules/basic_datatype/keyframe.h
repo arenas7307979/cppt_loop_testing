@@ -30,27 +30,30 @@ public:
 
     void updateVioPose(Eigen::Map<Sophus::SE3d> &mTwc_loop);
 
+    //frame info
     int mKeyFrameID;
+    double mTimeStamp;
     Sophus::SE3d mTwc;
-
-    //save index in pose graph, local index in 4DOF/6DOF optimizer
-    int indexInLoop = 0;
-    int local_index= 0;
-    // image points Iinfo
+    Sophus::SE3d vio_mTwc;
+    //2D/3D point from frame info
     std::vector<uint32_t> mvPtCount;
     std::vector<cv::Point2f> mv_uv;
     std::vector<float> mv_ur; // value -1 is mono point
     std::vector<Eigen::Vector3d> x3Dws;
     uint32_t mNumStereo;
 
+    //save index in pose graph, local index in 4DOF/6DOF optimizer
+    int indexInLoop = 0;
+    int local_index= 0;
+
+
 #if DEBUG_POSEGRAPH
     cv::Mat mImgL;
 #endif
 
-    //Image desc/points
+    //Image desc/points in pose graph (Large number)
     std::vector<cv::Mat> descriptors;
     std::vector<cv::KeyPoint> k_pts;
-    double mTimeStamp;
 
     // ceres solver to optimize pose
     double vertex_data[7];

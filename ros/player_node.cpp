@@ -24,6 +24,8 @@ using namespace std;
 using namespace message_filters;
 using namespace sensor_msgs;
 
+std::vector<KeyframePtr> pg_path;
+
 class Node {
 public:
     using Measurements = vector<pair<pair<ImageConstPtr, ImageConstPtr>, vector<ImuConstPtr>>>;
@@ -226,32 +228,33 @@ public:
 
 
 
-    void PubPoseGraph(const std::vector<Sophus::SE3d>& v_Twc,
+    void PubPoseGraph(const std::vector<KeyframePtr>& v_Twc,
                           const int& twc_type) {
         if(v_Twc.empty())
             return;
 
         static Sophus::SE3d Tglw = Sophus::SE3d::rotX(-M_PI/2);
 
-        { // print keyframe point
+        { // print keyframe path in PoseGraph
             visualization_msgs::Marker PoseGraphPoses;
             PoseGraphPoses.header.frame_id = "world";
             PoseGraphPoses.ns = "PoseGraph";
-            PoseGraphPoses.type = visualization_msgs::Marker::SPHERE_LIST;
+            PoseGraphPoses.type = visualization_msgs::Marker::LINE_STRIP;
             PoseGraphPoses.action = visualization_msgs::Marker::ADD;
             PoseGraphPoses.pose.orientation.w = 1.0;
             PoseGraphPoses.lifetime = ros::Duration();
 
             PoseGraphPoses.id = 0;
-            PoseGraphPoses.scale.x = 0.1;
-            PoseGraphPoses.scale.y = 0.1;
-            PoseGraphPoses.scale.z = 0.1;
+            PoseGraphPoses.scale.x = 0.011;
+            PoseGraphPoses.scale.y = 0.011;
+            PoseGraphPoses.scale.z = 0.011;
             PoseGraphPoses.color.r = 1.0;
             PoseGraphPoses.color.g = 1.0;
             PoseGraphPoses.color.a = 1.0;
-
+            pg_path.clear();
             for(auto& Twc : v_Twc) {
-                Eigen::Vector3d twc = (Tglw*Twc).translation();
+                pg_path.push_back(Twc);
+                Eigen::Vector3d twc = (Tglw*Twc->mTwc).translation();
                 geometry_msgs::Point pose_marker;
                 pose_marker.x = twc(0);
                 pose_marker.y = twc(1);
@@ -260,7 +263,45 @@ public:
             }
             pub_posegraph.publish(PoseGraphPoses);
         }
+
+        //print loop edge that connect between vio path and pose graph path.
+        {
+         visualization_msgs::Marker LoopEdge;
+
+         LoopEdge.header.frame_id = "world";
+         LoopEdge.ns = "LoopEdge";
+         LoopEdge.pose.orientation.w = 1.0;
+         LoopEdge.lifetime = ros::Duration();
+         LoopEdge.type = visualization_msgs::Marker::LINE_LIST;
+         LoopEdge.action = visualization_msgs::Marker::ADD;
+         LoopEdge.scale.x = 0.04;
+         //LoopEdge.scale.x = 0.3;
+
+         LoopEdge.color.r = 1.0f;
+         LoopEdge.color.b = 1.0f;
+         LoopEdge.color.a = 1.0;
+
+         geometry_msgs::Point point0, point1;
+
+         for(auto& Twc : v_Twc) {
+             if(Twc->has_loop){
+             Eigen::Vector3d twc = (Tglw*Twc->mTwc).translation();
+             Eigen::Vector3d vio = (Tglw*Twc->vio_mTwc).translation();
+             geometry_msgs::Point edge1, edge2;
+             edge1.x = twc(0);
+             edge1.y = twc(1);
+             edge1.z = twc(2);
+             edge2.x = vio(0);
+             edge2.y = vio(1);
+             edge2.z = vio(2);
+             LoopEdge.points.emplace_back(edge1);
+             LoopEdge.points.emplace_back(edge2);
+             }
+         }
+         pub_loop_edge.publish(LoopEdge);
+        }
     }
+
 
     void PubCurPose(const Sophus::SE3d& Twc, double timestamp) {
         static Sophus::SE3d Tglw = Sophus::SE3d::rotX(-M_PI/2);
@@ -310,6 +351,7 @@ public:
     ros::Publisher pub_keyframes;
     ros::Publisher pub_mappoints;
     ros::Publisher pub_posegraph;
+    ros::Publisher pub_loop_edge;
     CameraPoseVisualization camera_pose_visual;
 };
 
@@ -321,6 +363,8 @@ void sigint_handler(int s) {
     if(!fout.is_open())
         exit(1);
 
+// 1 is record for VO/VIO path / 0 is record for pose graph path
+#if 0
     for(auto& pose : node.path.poses) {
         fout << pose.header.stamp << " ";
         fout << pose.pose.position.x << " " << pose.pose.position.y << " " <<
@@ -328,7 +372,18 @@ void sigint_handler(int s) {
         fout << pose.pose.orientation.x << " " << pose.pose.orientation.y << " "
              << pose.pose.orientation.z << " " << pose.pose.orientation.w << std::endl;
     }
-
+#else
+    static Sophus::SE3d Tglw = Sophus::SE3d::rotX(-M_PI/2);
+    for(auto& pose : pg_path) {
+       Sophus::SE3d Tglc = Tglw * pose->mTwc;
+       Eigen::Vector3d twc = Tglc.translation();
+       Eigen::Quaterniond qwc = Tglc.so3().unit_quaternion();
+        fout << std::setprecision(20) << pose->mTimeStamp << " ";
+        fout << std::setprecision(8) <<twc.x() << " " << twc.y() << " " << twc.z() << " ";
+        fout << qwc.x() << " " << qwc.y() << " "
+             << qwc.z() << " " << qwc.w() << std::endl;
+    }
+#endif
     exit(1);
 }
 
@@ -357,6 +412,7 @@ int main(int argc, char** argv) {
     node.pub_keyframes = nh.advertise<visualization_msgs::Marker>("keyframes", 1000);
     node.pub_mappoints = nh.advertise<visualization_msgs::Marker>("mappoints", 1000);
     node.pub_posegraph = nh.advertise<visualization_msgs::Marker>("poseGraph", 1000);
+    node.pub_loop_edge = nh.advertise<visualization_msgs::Marker>("loop_edge", 1000);
     ROS_INFO_STREAM("Player is ready.");
 
     ros::spin();

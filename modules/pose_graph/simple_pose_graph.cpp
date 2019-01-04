@@ -6,7 +6,7 @@
 #include <chrono>
 #include <thread>
 #define  MIN_PNPRANSAC_NUM 25
-#define  MIN_USELOOPDETECT_NUM 100
+#define  MIN_USELOOPDETECT_NUM 50
 #define  SIX_DOF 1
 void reduceVector(std::vector<cv::Point2f> &v, std::vector<uchar> status)
 {
@@ -70,11 +70,10 @@ void SimplePoseGraph::Process(){
         for(auto& cur_kf : v_frame) {
 
             std::unique_lock<std::mutex> lock(pg_process);
-            if((cur_kf->mTwc.translation() - last_t).norm() > 0){
+            if((cur_kf->vio_mTwc.translation() - last_t).norm() > 0){
                 int loop_index = -1;
                 cur_kf->indexInLoop = db_index;
-
-                cur_kf->mTwc = cur_kf->mTwc * T_drift;
+                //std::cout  << "T_drift=" << T_drift.matrix() << std::endl;
                 //KeyframePtr cur_kf = std::make_shared<Keyframe>(frame, umax, db_index);
                 loop_index = LoopDetection(cur_kf, db_index);
 
@@ -99,15 +98,11 @@ void SimplePoseGraph::Process(){
                 }
                 //for update map of keyframes
                 keyframesMutex.lock();
+                cur_kf->mTwc = cur_kf->vio_mTwc * T_drift;
                 keyframes.push_back(cur_kf); //add curr frame to keyframes
-                last_t = cur_kf->mTwc.translation();
+                last_t = cur_kf->vio_mTwc.translation();
                 db_index++;
-                std::vector<Sophus::SE3d> keyframe_twc;
-                for(int k=0; k<keyframes.size(); k++){
-                    keyframe_twc.emplace_back(keyframes[k]->mTwc);
-                }
-                ShowPoseGraphResultGUI(keyframe_twc, 0);
-                //publish() not finish yet
+                ShowPoseGraphResultGUI(keyframes, 0);
                 keyframesMutex.unlock();
             }
         }
@@ -141,7 +136,6 @@ void SimplePoseGraph::optimize6DoF(){
             //-------start.optimize6DoF
             keyframesMutex.lock();
             KeyframePtr cur_kf = keyframes[cur_index];
-
             //ceres optimizer
             ceres::Problem problem;
             ceres::Solver::Options options;
@@ -150,37 +144,37 @@ void SimplePoseGraph::optimize6DoF(){
             ceres::Solver::Summary summary;
             ceres::LossFunction *loss_function;
             loss_function = new ceres::HuberLoss(0.1);
-            ceres::LocalParameterization* angle_local_parameterization =
-                    AngleLocalParameterization::Create();
-
+#if SIX_DOF
             ceres::LocalParameterization* quaternion_local_parameterization =
                     new ceres::EigenQuaternionParameterization;
-
-            Sophus::SE3d cur_VIO = cur_kf->mTwc;
+#else
+            ceres::LocalParameterization* angle_local_parameterization =
+                    AngleLocalParameterization::Create();
+#endif
 
             //information matrix
             Eigen::Matrix<double, 6, 6> information;
             information.setIdentity();
 
+            int i_n=0;
             //set vertex
             for (auto &it : keyframes){
 
                 //older than first_looped_index
                 if (it->indexInLoop < first_looped_index)
                     continue;
-
                 //Add vertex
                 //Add rotation / translation, Sophus Eigen Quaternion is qx,y,z, qw;
 #if SIX_DOF
-                std::memcpy(it->c_rotation, it->mTwc.data(), sizeof(double) * 4);
-                std::memcpy(it->c_translation, it->mTwc.data()+4, sizeof(double) * 3);
+                std::memcpy(it->c_rotation, it->vio_mTwc.data(), sizeof(double) * 4);
+                std::memcpy(it->c_translation, it->vio_mTwc.data()+4, sizeof(double) * 3);
                 problem.AddParameterBlock(it->c_rotation, 4 , quaternion_local_parameterization);
                 problem.AddParameterBlock(it->c_translation, 3);
 #else
-                Eigen::Quaterniond tmp_q = it->mTwc.so3().unit_quaternion();
+                Eigen::Quaterniond tmp_q = it->vio_mTwc.so3().unit_quaternion();
                 Eigen::Vector3d euler_angle = Utility::R2ypr(tmp_q.toRotationMatrix());
                 std::memcpy(it->euler_array, euler_angle.data(), sizeof(double) * 3);
-                std::memcpy(it->c_translation, it->mTwc.data()+4, sizeof(double) * 3);
+                std::memcpy(it->c_translation, it->vio_mTwc.data()+4, sizeof(double) * 3);
                 it->q_array = tmp_q;
                 problem.AddParameterBlock(it->euler_array, 1, angle_local_parameterization);
                 problem.AddParameterBlock(it->c_translation, 3);
@@ -203,13 +197,12 @@ void SimplePoseGraph::optimize6DoF(){
 #endif
 
                 //Add edge of pose that previous 5keyframe as constriant.
-
 #if SIX_DOF
                 for (int j = 1; j < 5; j++)
                 {
-                    if ((it->indexInLoop) - j >= 0 && (it->indexInLoop) - j > first_looped_index)
+                    if ((it->indexInLoop - j) > first_looped_index)
                     {
-                        Sophus::SE3d relativePose = keyframes[(it->indexInLoop) - j]->mTwc.inverse() * it->mTwc;
+                        Sophus::SE3d relativePose = keyframes[(it->indexInLoop) - j]->vio_mTwc.inverse() * it->vio_mTwc;
                         //Estimate (Twi-j).inverse * (Twi)
                         ceres::CostFunction* cost_function =
                                 PoseGraph3dErrorTerm::Create(relativePose, information);
@@ -233,7 +226,7 @@ void SimplePoseGraph::optimize6DoF(){
                     if ((it->indexInLoop) - j >= 0 && (it->indexInLoop) - j > first_looped_index)
                     {
                         Eigen::Vector3d euler_conncected = Utility::R2ypr(keyframes[(it->indexInLoop) - j]->q_array.toRotationMatrix());
-                        Sophus::SE3d relativePose = keyframes[(it->indexInLoop) - j]->mTwc.inverse() * it->mTwc;
+                        Sophus::SE3d relativePose = keyframes[(it->indexInLoop) - j]->vio_mTwc.inverse() * it->vio_mTwc;
                         double relative_yaw = it->euler_array[0] - keyframes[(it->indexInLoop) - j]->euler_array[0];
                         //Estimate (Twi-j).inverse * (Twi)
                         ceres::CostFunction* cost_function = FourDOFError::Create( relativePose.translation().x(),
@@ -291,7 +284,6 @@ void SimplePoseGraph::optimize6DoF(){
 
                 }
 #endif
-
                 if ((it)->indexInLoop == cur_index)
                     break;
             }
@@ -299,21 +291,9 @@ void SimplePoseGraph::optimize6DoF(){
             keyframesMutex.unlock();
             ceres::Solve(options, &problem, &summary);
 
-
 #if SIX_DOF
-            //set roatation and translation value to vertex_data
-            for (int k = 0; k < 7; k++)
-            {
-                if(k<4){
-                    keyframes[cur_index]->vertex_data[k] =keyframes[cur_index]->c_rotation[k];
-                }
-                else{
-                    keyframes[cur_index]->vertex_data[k] =keyframes[cur_index]->c_translation[k-4];
-                }
-            }
-            Eigen::Map<Sophus::SE3d> cur_VIOnew(keyframes[cur_index]->vertex_data);
-
             //-------start.UpdatePose and estimate drift Pose
+            //std::vector<KeyframePtr> keyframes_debug;
             keyframesMutex.lock();
             std::vector<Sophus::SE3d> keyframes_Twc;
             for (auto &it : keyframes){
@@ -321,6 +301,8 @@ void SimplePoseGraph::optimize6DoF(){
                 if (it->indexInLoop < first_looped_index)
                     continue;
 
+
+                //keyframes_debug.emplace_back(it);
                 for (int k = 0; k < 7; k++)
                 {
                     if(k<4){
@@ -330,31 +312,29 @@ void SimplePoseGraph::optimize6DoF(){
                         it->vertex_data[k] = it->c_translation[k-4];
                     }
                 }
-                Eigen::Map<Sophus::SE3d> cur_VIOnew(it->vertex_data);
-                Sophus::SE3d cur_VIOnew_ = cur_VIOnew;
+                Eigen::Map<Sophus::SE3d> cur_VIOnew_(it->vertex_data);
+                Sophus::SE3d cur_VIOnew = cur_VIOnew_;
                 it->mTwc = cur_VIOnew;
-                //keyframes_Twc.push_back(cur_VIOnew_);
+                //keyframes_Twc.push_back(cur_VIOnew);
                 if ((it)->indexInLoop == cur_index)
                     break;
             }
-            keyframesMutex.unlock();
+            //ShowPoseGraphResultGUI(keyframes_debug, 0);
             //ShowPoseGraphResultGUI(keyframes_Twc, 0);
-
 
             //-------start. estimate drift Pose
             m_drift.lock();
-            T_drift = cur_VIO.inverse() * keyframes[cur_index]->mTwc;
-            //???from vins
-            T_drift.translation() = keyframes[cur_index]->mTwc.translation()
-                    - (T_drift.rotationMatrix() * cur_VIO.translation());
+            T_drift = keyframes[cur_index]->vio_mTwc.inverse() * keyframes[cur_index]->mTwc;
+            //            //???from vins
+            //            //T_drift.translation() = keyframes[cur_index]->mTwc.translation() -
+            //            //        (T_drift.rotationMatrix() * cur_VIO.translation());
             m_drift.unlock();
 
             //-------start. update keyframe pose that index bigger than cur_index
-            keyframesMutex.lock();
             for (auto &it : keyframes){
-                if ((it)->indexInLoop > cur_index && cur_index != -1)
+                if ((it)->indexInLoop > cur_index)
                 {
-                    it->mTwc  = it->mTwc * T_drift;
+                    it->mTwc  = it->vio_mTwc * T_drift;
                 }
             }
             keyframesMutex.unlock();
@@ -379,16 +359,13 @@ void SimplePoseGraph::optimize6DoF(){
             //-------start. estimate drift Pose
             m_drift.lock();
             T_drift = cur_VIO.inverse() * keyframes[cur_index]->mTwc;
-            //???from vins
-            T_drift.translation() = keyframes[cur_index]->mTwc.translation()
-                    - (T_drift.rotationMatrix() * cur_VIO.translation());
             m_drift.unlock();
 
             //-------start. update keyframe pose that index bigger than cur_index
             keyframesMutex.lock();
             for (auto &it : keyframes){
-                if ((it)->indexInLoop > cur_index && cur_index != -1)
-                it->mTwc  = it->mTwc * T_drift;
+                if ((it)->indexInLoop > cur_index)
+                    it->mTwc  = it->mTwc * T_drift;
             }
             keyframesMutex.unlock();
 #endif
@@ -399,17 +376,17 @@ void SimplePoseGraph::optimize6DoF(){
 }
 
 
-void SimplePoseGraph::SetPoseDebugCallback(const std::function<void(const std::vector<Sophus::SE3d>&, const int& twc_type)>& callback)
+void SimplePoseGraph::SetPoseDebugCallback(const std::function<void(const std::vector<KeyframePtr>&, const int& twc_type)>& callback)
 {
     mDebugCallback = callback;
 }
 
-void SimplePoseGraph::ShowPoseGraphResultGUI(std::vector<Sophus::SE3d>& keyframes_Twc, int twc_type) const
+void SimplePoseGraph::ShowPoseGraphResultGUI(std::vector<KeyframePtr>& keyframes, int twc_type) const
 {
     if(!mDebugCallback)
         return;
 
-    mDebugCallback(keyframes_Twc, twc_type);
+    mDebugCallback(keyframes, twc_type);
 }
 
 bool SimplePoseGraph::LoadORBVocabulary(std::string& voc_path){
@@ -424,15 +401,11 @@ int SimplePoseGraph::LoopDetection(const KeyframePtr& keyframe, const int& db_id
     ScopedTrace st("LoopDetection");
     std::vector<cv::Mat> desc = keyframe->descriptors;
     DBoW2::QueryResults ret;
-    if(db_id <= MIN_USELOOPDETECT_NUM){
-        ORBdatabase.add(desc);
-    }
-    else{
-        Tracer::TraceBegin("query&add");
-        ORBdatabase.query(desc, ret, 3, db_id-MIN_USELOOPDETECT_NUM);
-        ORBdatabase.add(desc);
-        Tracer::TraceEnd();
-    }
+
+    Tracer::TraceBegin("query&add");
+    ORBdatabase.query(desc, ret, 3, db_id-MIN_USELOOPDETECT_NUM);
+    ORBdatabase.add(desc);
+    Tracer::TraceEnd();
     bool find_loop = false;
 
 #if DEBUG_POSEGRAPH
@@ -464,7 +437,7 @@ int SimplePoseGraph::LoopDetection(const KeyframePtr& keyframe, const int& db_id
 
         }
     }
-    if (find_loop && db_id > MIN_USELOOPDETECT_NUM)
+    if (find_loop && db_id >= MIN_USELOOPDETECT_NUM)
     {
         int min_index = -1;
         for (unsigned int i = 0; i < ret.size(); i++)
@@ -520,14 +493,14 @@ bool SimplePoseGraph::FindKFConnect(KeyframePtr& cur_kf, KeyframePtr& old_kf){
         cv::Mat inliers;
 
         //<Assign inital pose (Tcw_cur)>
-        Sophus::SE3d Tcw_cur = cur_kf->mTwc.inverse();
+        Sophus::SE3d Tcw_cur = cur_kf->vio_mTwc.inverse();
         cv::eigen2cv(Tcw_cur.rotationMatrix(), tmp_r);
         cv::eigen2cv(Tcw_cur.translation(), tvec);
         cv::Rodrigues(tmp_r, rvec);
 
         //<Tcw :: rvec / tvec>
         cv::solvePnPRansac(matched_x3Dw, matched_2d_old, K, cv::noArray(), rvec, tvec, true,
-                           100, 8.0, 0.99, inliers);
+                           100, 10.0, 0.99, inliers);
 
         for (int i = 0; i < (int)matched_2d_old.size(); i++)
             status.push_back(0);
@@ -571,7 +544,7 @@ bool SimplePoseGraph::FindKFConnect(KeyframePtr& cur_kf, KeyframePtr& old_kf){
 
                 cv::imshow("merage", merage);
                 cv::waitKey(4);cur_index
-                cv::imwrite("/catkin_ws/src/libcppt/modules/Vocabulary/" + to_string(old_kf->mKeyFrameID) + ".jpg", merage);
+                        cv::imwrite("/catkin_ws/src/libcppt/modules/Vocabulary/" + to_string(old_kf->mKeyFrameID) + ".jpg", merage);
             }
         }
 #endif
@@ -587,8 +560,8 @@ bool SimplePoseGraph::FindKFConnect(KeyframePtr& cur_kf, KeyframePtr& old_kf){
             Sophus::SE3d Tcw_cur(R,t);
 
             //set loop info to cur_kf
-            double relative_yaw = Utility::normalizeAngle(Utility::R2ypr(cur_kf->mTwc.rotationMatrix()).x() - Utility::R2ypr(Tcw_cur.inverse().rotationMatrix()).x());
-            Sophus::SE3d relative_T = Tcw_cur * cur_kf->mTwc;
+            double relative_yaw = Utility::normalizeAngle(Utility::R2ypr(cur_kf->vio_mTwc.rotationMatrix()).x() - Utility::R2ypr(Tcw_cur.inverse().rotationMatrix()).x());
+            Sophus::SE3d relative_T = Tcw_cur * cur_kf->vio_mTwc;
 
             //TODO:: need change this condition that only for VIO(with IMU).
             if (abs(relative_yaw) < 30.0 && relative_T.translation().norm() < 20.0)
@@ -604,9 +577,6 @@ bool SimplePoseGraph::FindKFConnect(KeyframePtr& cur_kf, KeyframePtr& old_kf){
                 ShowPoseGraphResultGUI(PnPresult);
 #endif
             }
-
-
-
             return true;
         }
     }

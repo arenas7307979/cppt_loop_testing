@@ -30,7 +30,7 @@ public:
     void SetPoseGraphCallback(const std::function<void(const KeyframePtr)>& PG_callback);
 
     //Set debugCallback
-    void SetPoseDebugCallback(const std::function<void(const std::vector<Sophus::SE3d>&, const int& twc_type)>& callback);
+    void SetPoseDebugCallback(const std::function<void(const std::vector<KeyframePtr>&, const int& twc_type)>& callback);
 
     std::function<void(const KeyframePtr)> mPoseGraphCallback;
 
@@ -41,7 +41,7 @@ public:
 
 private:
 
-    void ShowPoseGraphResultGUI(std::vector<Sophus::SE3d>& keyframes_Twc, int twc_type) const;
+    void ShowPoseGraphResultGUI(std::vector<KeyframePtr>& keyframes, int twc_type) const;
 
     //LoadORBVocabulary
     bool LoadORBVocabulary(std::string& voc_path);
@@ -106,7 +106,7 @@ private:
     std::mutex m_drift;
 
     //debug for LC callback function
-    std::function<void(const std::vector<Sophus::SE3d>&, int& twc_type)> mDebugCallback;
+    std::function<void(const std::vector<KeyframePtr>&, int& twc_type)> mDebugCallback;
 
 #if DEBUG_POSEGRAPH
     //for debug

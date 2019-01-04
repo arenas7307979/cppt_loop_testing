@@ -78,13 +78,15 @@ Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax){
     mKeyFrameID = frame->mKeyFrameID;
     double vector_mTwc[7];
     std::memcpy(vector_mTwc, frame->mTwc.data(), sizeof(double)*7);
-    Eigen::Map<Sophus::SE3d> mTwc_copy (vector_mTwc);
+    Eigen::Map<Sophus::SE3d> mTwc_tmp (vector_mTwc);
+    Sophus::SE3d mTwc_copy =  mTwc_tmp;
     mTwc = mTwc_copy;
+    vio_mTwc = mTwc_copy;
     mNumStereo = frame->mNumStereo;
+    mTimeStamp = frame->mTimeStamp;
 #if DEBUG_POSEGRAPH
     mImgL = frame->mImgL.clone();
 #endif
-    k_pts.clear();
     int image_rows = frame->mImgL.rows;
     int image_cols = frame->mImgL.cols;
     for(int i=0; i<frame->mv_uv.size(); i++){
@@ -107,8 +109,9 @@ Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax){
         k_pts.push_back(tmp_mv_uv);
     }
 
+    cv::Mat ImgL_copy = frame->mImgL.clone();
     std::vector<cv::KeyPoint> tmp_keypoint;
-    cv::FAST(frame->mImgL, tmp_keypoint, 15, true);
+    cv::FAST(ImgL_copy, tmp_keypoint, 15, true);
     for(int i=0; i<tmp_keypoint.size(); i++){
         //remove border point
         if (tmp_keypoint[i].pt.x < 20 || tmp_keypoint[i].pt.y < 20 || tmp_keypoint[i].pt.x >= image_cols - 20
@@ -121,9 +124,10 @@ Keyframe::Keyframe(const FramePtr frame, std::vector<int>& umax){
     }
 
     //Compute angle of points from tmp_mv_uv
-    computeOrientation(frame->mImgL, k_pts, umax);
+    computeOrientation(ImgL_copy, k_pts, umax);
     //Compute ORB desc
-    computeORBDescriptors(frame->mImgL);
+    computeORBDescriptors(ImgL_copy);
+    ImgL_copy.release();
 }
 
 Keyframe::~Keyframe(){};

@@ -124,7 +124,7 @@ bool StereoProjectionFactor::Evaluate(double const* const* parameters_raw, doubl
             Eigen::Map<Eigen::Matrix<double, 3, 7, Eigen::RowMajor>> Jpi_pose(jacobian_raw[0]);
             Eigen::Matrix<double, 3, 6> Jx3Dc_pose;
             Jx3Dc_pose << -Eigen::Matrix3d::Identity(), Sophus::SO3d::hat(x3Dc);
-            Jpi_pose.leftCols(6) = Jpi_x3Dc * Jx3Dc_pose;
+            Jpi_pose.leftCols(6) = Jpi_x3Dc * Twc.inverse().rotationMatrix() * Jx3Dc_pose;
             Jpi_pose.rightCols(1).setZero();
         }
     }
